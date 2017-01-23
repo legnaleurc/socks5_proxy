@@ -63,7 +63,7 @@ std::shared_ptr<Session> Session::Private::kungFuDeathGrip() {
 void Session::Private::doInnerResolve() {
     auto self = this->kungFuDeathGrip();
     auto fn = [self](const ErrorCode & ec, Resolver::iterator it) -> void {
-        self->_->onResolved(ec, it);
+        self->_->onInnerResolved(ec, it);
     };
 
     auto port = boost::lexical_cast<std::string>(Application::instance().socks5Port());
@@ -73,7 +73,7 @@ void Session::Private::doInnerResolve() {
     }, fn);
 }
 
-void Session::Private::onResolved(const ErrorCode & ec, Resolver::iterator it) {
+void Session::Private::onInnerResolved(const ErrorCode & ec, Resolver::iterator it) {
     // TODO handle error
     if (ec) {
         std::cerr << "onResolved failed" << ec << std::endl;

@@ -37,7 +37,7 @@ public:
     std::shared_ptr<Session> kungFuDeathGrip();
 
     void doInnerResolve();
-    void onResolved(const ErrorCode & ec, Resolver::iterator it);
+    void onInnerResolved(const ErrorCode & ec, Resolver::iterator it);
     void doInnerConnect(Resolver::iterator it);
     void onInnerConnected(const ErrorCode & ec, Resolver::iterator it);
     void doInnerPhase1();
