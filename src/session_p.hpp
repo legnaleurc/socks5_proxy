@@ -57,8 +57,6 @@ public:
     std::weak_ptr<Session> self;
     Socket outer_socket;
     Socket inner_socket;
-    Chunk incoming_buffer;
-    Chunk outgoing_buffer;
     Resolver resolver;
 };
 

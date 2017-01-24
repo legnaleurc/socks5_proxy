@@ -55,8 +55,6 @@ Session::Private::Private(Socket socket)
     : self()
     , outer_socket(std::move(socket))
     , inner_socket(this->outer_socket.get_io_service())
-    , incoming_buffer(createChunk())
-    , outgoing_buffer(createChunk())
     , resolver(this->outer_socket.get_io_service())
 {
 }
@@ -114,15 +112,15 @@ void Session::Private::onInnerConnected(const ErrorCode & ec, Resolver::iterator
 }
 
 void Session::Private::doInnerPhase1() {
-    auto & buffer = this->incoming_buffer;
+    auto chunk = createChunk();
     // VER
-    buffer[0] = 0x05;
+    chunk[0] = 0x05;
     // NMETHODS
-    buffer[1] = 0x01;
+    chunk[1] = 0x01;
     // METHODS
-    buffer[2] = 0x00;
+    chunk[2] = 0x00;
 
-    SocketWriter writer(this->inner_socket, buffer, 3, std::bind(&Session::Private::doInnerPhase2, this));
+    SocketWriter writer(this->inner_socket, chunk, 3, std::bind(&Session::Private::doInnerPhase2, this));
     writer();
 }
 
@@ -148,24 +146,24 @@ void Session::Private::onInnerPhase2Read(const Chunk & buffer, std::size_t lengt
 }
 
 void Session::Private::doInnerPhase3() {
-    auto & buffer = this->incoming_buffer;
+    auto chunk = createChunk();
     // VER
-    buffer[0] = 0x05;
+    chunk[0] = 0x05;
     // CMD
-    buffer[1] = 0x01;
+    chunk[1] = 0x01;
     // RSV
-    buffer[2] = 0x00;
+    chunk[2] = 0x00;
 
     std::size_t used_byte = 0;
     switch (Application::instance().httpHostType()) {
     case AddressType::IPV4:
-        used_byte = this->fillIpv4(buffer, 3);
+        used_byte = this->fillIpv4(chunk, 3);
         break;
     case AddressType::IPV6:
-        used_byte = this->fillIpv6(buffer, 3);
+        used_byte = this->fillIpv6(chunk, 3);
         break;
     case AddressType::FQDN:
-        used_byte = this->fillFqdn(buffer, 3);
+        used_byte = this->fillFqdn(chunk, 3);
         break;
     default:
         std::cerr << "unknown target http address" << std::endl;
@@ -173,11 +171,11 @@ void Session::Private::doInnerPhase3() {
     }
 
     // DST.PORT
-    putBigEndian(&buffer[3 + used_byte], Application::instance().httpPort());
+    putBigEndian(&chunk[3 + used_byte], Application::instance().httpPort());
 
     std::size_t total_length = 3 + used_byte + 2;
 
-    SocketWriter writer(this->inner_socket, this->incoming_buffer, total_length, std::bind(&Session::Private::doInnerPhase4, this));
+    SocketWriter writer(this->inner_socket, chunk, total_length, std::bind(&Session::Private::doInnerPhase4, this));
     writer();
 }
 
