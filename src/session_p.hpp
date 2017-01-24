@@ -32,13 +32,6 @@ namespace s5p {
 
 class Session::Private {
 public:
-    typedef std::function<void ()> WroteCallback;
-    typedef std::function<void (const Chunk &, std::size_t)> ReadCallback;
-    static void doWrite(std::shared_ptr<Session> self, Socket & socket, Chunk & buffer, std::size_t offset, std::size_t length, WroteCallback cb);
-    static void onWrote(const ErrorCode & ec, std::size_t wrote_length, std::shared_ptr<Session> self, Socket & socket, Chunk & buffer, std::size_t offset, std::size_t total_length, WroteCallback cb);
-    static void doRead(std::shared_ptr<Session> self, Socket & socket, Chunk & buffer, ReadCallback cb);
-    static void onRead(const ErrorCode & ec, std::size_t length, std::shared_ptr<Session> self, const Chunk & buffer, ReadCallback cb);
-
     Private(Socket socket);
 
     std::shared_ptr<Session> kungFuDeathGrip();
@@ -67,6 +60,40 @@ public:
     Chunk incoming_buffer;
     Chunk outgoing_buffer;
     Resolver resolver;
+};
+
+
+typedef std::function<void(const Chunk &, std::size_t)> ReadCallback;
+
+
+class SocketReader {
+public:
+    SocketReader(Socket & socket, ReadCallback callback);
+
+    void operator () ();
+    void onRead(const ErrorCode & ec, std::size_t length);
+
+    Socket & socket;
+    ReadCallback callback;
+    Chunk chunk;
+};
+
+
+typedef std::function<void()> WroteCallback;
+
+
+class SocketWriter {
+public:
+    SocketWriter(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback);
+
+    void operator () ();
+    void onWrote(const ErrorCode & ec, std::size_t wrote_length);
+
+    Socket & socket;
+    WroteCallback callback;
+    const Chunk & chunk;
+    std::size_t offset;
+    std::size_t length;
 };
 
 }

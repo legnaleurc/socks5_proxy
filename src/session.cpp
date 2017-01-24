@@ -34,6 +34,10 @@ using s5p::Socket;
 using s5p::Resolver;
 using s5p::ErrorCode;
 using s5p::Chunk;
+using s5p::SocketReader;
+using s5p::SocketWriter;
+using s5p::ReadCallback;
+using s5p::WroteCallback;
 
 
 Session::Session(Socket socket)
@@ -46,44 +50,6 @@ void Session::start() {
     _->doInnerResolve();
 }
 
-void Session::Private::doWrite(std::shared_ptr<Session> self, Socket & socket, Chunk & buffer, std::size_t offset, std::size_t length, WroteCallback cb) {
-    auto b = boost::asio::buffer(&buffer[offset], length);
-    socket.async_write_some(b, [self, &socket, &buffer, offset, length, cb](const ErrorCode & ec, std::size_t wrote_length) -> void {
-        Session::Private::onWrote(ec, wrote_length, self, socket, buffer, offset, length, cb);
-    });
-}
-
-void Session::Private::onWrote(const ErrorCode & ec, std::size_t wrote_length, std::shared_ptr<Session> self, Socket & socket, Chunk & buffer, std::size_t offset, std::size_t total_length, WroteCallback cb) {
-    // TODO handle error
-    if (ec) {
-        std::cerr << "onWrote " << ec.message() << std::endl;
-        return;
-    }
-
-    if (wrote_length < total_length) {
-        Session::Private::doWrite(self, socket, buffer, offset + wrote_length, total_length - wrote_length, cb);
-        return;
-    }
-
-    cb();
-}
-
-void Session::Private::doRead(std::shared_ptr<Session> self, Socket & socket, Chunk & buffer, ReadCallback cb) {
-    auto b = boost::asio::buffer(buffer);
-    socket.async_read_some(b, [self, &buffer, cb](const ErrorCode & ec, std::size_t length) -> void {
-        Session::Private::onRead(ec, length, self, buffer, cb);
-    });
-}
-
-void Session::Private::onRead(const ErrorCode & ec, std::size_t length, std::shared_ptr<Session> self, const Chunk & buffer, ReadCallback cb) {
-    // TODO handle error
-    if (ec) {
-        std::cerr << "onRead " << ec.message() << std::endl;
-        return;
-    }
-
-    cb(buffer, length);
-}
 
 Session::Private::Private(Socket socket)
     : self()
@@ -148,7 +114,6 @@ void Session::Private::onInnerConnected(const ErrorCode & ec, Resolver::iterator
 }
 
 void Session::Private::doInnerPhase1() {
-    auto self = this->kungFuDeathGrip();
     auto & buffer = this->incoming_buffer;
     // VER
     buffer[0] = 0x05;
@@ -157,23 +122,15 @@ void Session::Private::doInnerPhase1() {
     // METHODS
     buffer[2] = 0x00;
 
-    Session::Private::doWrite(
-        self,
-        this->inner_socket,
-        this->incoming_buffer,
-        0,
-        3,
-        std::bind(&Session::Private::doInnerPhase2, self->_));
+    SocketWriter writer(this->inner_socket, buffer, 3, std::bind(&Session::Private::doInnerPhase2, this));
+    writer();
 }
 
 void Session::Private::doInnerPhase2() {
     namespace ph = std::placeholders;
-    auto self = this->kungFuDeathGrip();
-    Session::Private::doRead(
-        self,
-        this->inner_socket,
-        this->outgoing_buffer,
-        std::bind(&Session::Private::onInnerPhase2Read, self->_, ph::_1, ph::_2));
+
+    SocketReader reader(this->inner_socket, std::bind(&Session::Private::onInnerPhase2Read, this, ph::_1, ph::_2));
+    reader();
 }
 
 void Session::Private::onInnerPhase2Read(const Chunk & buffer, std::size_t length) {
@@ -220,24 +177,15 @@ void Session::Private::doInnerPhase3() {
 
     std::size_t total_length = 3 + used_byte + 2;
 
-    auto self = this->kungFuDeathGrip();
-    Session::Private::doWrite(
-        self,
-        this->inner_socket,
-        this->incoming_buffer,
-        0,
-        total_length,
-        std::bind(&Session::Private::doInnerPhase4, self->_));
+    SocketWriter writer(this->inner_socket, this->incoming_buffer, total_length, std::bind(&Session::Private::doInnerPhase4, this));
+    writer();
 }
 
 void Session::Private::doInnerPhase4() {
     namespace ph = std::placeholders;
-    auto self = this->kungFuDeathGrip();
-    Session::Private::doRead(
-        self,
-        this->inner_socket,
-        this->outgoing_buffer,
-        std::bind(&Session::Private::onInnerPhase4Read, self->_, ph::_1, ph::_2));
+
+    SocketReader reader(this->inner_socket, std::bind(&Session::Private::onInnerPhase4Read, this, ph::_1, ph::_2));
+    reader();
 }
 
 void Session::Private::onInnerPhase4Read(const Chunk & buffer, std::size_t length) {
@@ -264,48 +212,30 @@ void Session::Private::onInnerPhase4Read(const Chunk & buffer, std::size_t lengt
 
 void Session::Private::doOuterRead() {
     namespace ph = std::placeholders;
-    auto self = this->kungFuDeathGrip();
-    Session::Private::doRead(
-        self,
-        this->outer_socket,
-        this->incoming_buffer,
-        std::bind(&Session::Private::onOuterRead, self->_, ph::_1, ph::_2));
+
+    SocketReader reader(this->outer_socket, std::bind(&Session::Private::onOuterRead, this, ph::_1, ph::_2));
+    reader();
 }
 
 void Session::Private::onOuterRead(const Chunk & buffer, std::size_t length) {
     namespace ph = std::placeholders;
-    auto self = this->kungFuDeathGrip();
 
-    Session::Private::doWrite(
-        self,
-        this->inner_socket,
-        this->incoming_buffer,
-        0,
-        length,
-        std::bind(&Session::Private::doOuterRead, self->_));
+    SocketWriter writer(this->inner_socket, buffer, length, std::bind(&Session::Private::doOuterRead, this));
+    writer();
 }
 
 void Session::Private::doInnerRead() {
     namespace ph = std::placeholders;
-    auto self = this->kungFuDeathGrip();
-    Session::Private::doRead(
-        self,
-        this->inner_socket,
-        this->outgoing_buffer,
-        std::bind(&Session::Private::onInnerRead, self->_, ph::_1, ph::_2));
+
+    SocketReader reader(this->inner_socket, std::bind(&Session::Private::onInnerRead, this, ph::_1, ph::_2));
+    reader();
 }
 
 void Session::Private::onInnerRead(const Chunk & buffer, std::size_t length) {
     namespace ph = std::placeholders;
-    auto self = this->kungFuDeathGrip();
 
-    Session::Private::doWrite(
-        self,
-        this->outer_socket,
-        this->outgoing_buffer,
-        0,
-        length,
-        std::bind(&Session::Private::doInnerRead, self->_));
+    SocketWriter writer(this->outer_socket, buffer, length, std::bind(&Session::Private::doInnerRead, this));
+    writer();
 }
 
 std::size_t Session::Private::fillIpv4(Chunk & buffer, std::size_t offset) {
@@ -340,4 +270,60 @@ std::size_t Session::Private::fillFqdn(Chunk & buffer, std::size_t offset) {
     std::copy(std::begin(hostname), std::end(hostname), std::next(std::begin(buffer), offset));
 
     return 1 + 1 + hostname.size();
+}
+
+
+SocketReader::SocketReader(Socket & socket, ReadCallback callback)
+    : socket(socket)
+    , callback(callback)
+    , chunk(createChunk())
+{}
+
+void SocketReader::operator ()() {
+    namespace ph = std::placeholders;
+    auto buffer = boost::asio::buffer(this->chunk);
+    this->socket.async_read_some(buffer, std::bind(&SocketReader::onRead, this, ph::_1, ph::_2));
+}
+
+void SocketReader::onRead(const ErrorCode & ec, std::size_t length) {
+    if (ec) {
+        // TODO handle error
+        std::cerr << "on socket read " << ec.message() << std::endl;
+        return;
+    }
+
+    this->callback(this->chunk, length);
+}
+
+
+SocketWriter::SocketWriter(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback)
+    : socket(socket)
+    , callback(callback)
+    , chunk(chunk)
+    , offset(0)
+    , length(length)
+{}
+
+void SocketWriter::operator ()() {
+    namespace ph = std::placeholders;
+    auto buffer = boost::asio::buffer(&this->chunk[this->offset], this->length);
+    this->socket.async_write_some(buffer, std::bind(&SocketWriter::onWrote, this, ph::_1, ph::_2));
+}
+
+void SocketWriter::onWrote(const ErrorCode & ec, std::size_t wrote_length) {
+    if (ec) {
+        // TODO handle error
+        std::cerr << "on socket read " << ec.message() << std::endl;
+        return;
+    }
+
+    this->offset += wrote_length;
+    this->length -= wrote_length;
+
+    if (this->length > 0) {
+        (*this)();
+        return;
+    }
+
+    this->callback();
 }
