@@ -51,8 +51,26 @@ void Session::start() {
 }
 
 void Session::stop() {
-    _->inner_socket.close();
-    _->outer_socket.close();
+    try {
+        _->inner_socket.shutdown(Socket::shutdown_both);
+    } catch (std::exception & e) {
+        std::cerr << "shutdown failed " << e.what() << std::endl;
+    }
+    try {
+        _->inner_socket.close();
+    } catch (std::exception & e) {
+        std::cerr << "close failed " << e.what() << std::endl;
+    }
+    try {
+        _->outer_socket.shutdown(Socket::shutdown_both);
+    } catch (std::exception & e) {
+        std::cerr << "shutdown failed " << e.what() << std::endl;
+    }
+    try {
+        _->outer_socket.close();
+    } catch (std::exception & e) {
+        std::cerr << "close failed " << e.what() << std::endl;
+    }
 }
 
 
@@ -322,7 +340,7 @@ void SocketWriter::operator ()(std::shared_ptr<Session> session) {
 void SocketWriter::onWrote(const ErrorCode & ec, std::size_t wrote_length) {
     if (ec) {
         // TODO handle error
-        std::cerr << "on socket read " << ec.message() << std::endl;
+        std::cerr << "on socket write " << ec.message() << std::endl;
         return;
     }
 
