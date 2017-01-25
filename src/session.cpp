@@ -316,6 +316,12 @@ void SocketReader::onRead(const ErrorCode & ec, std::size_t length) {
         return;
     }
 
+#ifndef NDEBUG
+    std::clog << "received " << length << " bytes" << std::endl;
+    std::string tmp(reinterpret_cast<const char*>(&this->chunk[0]), length);
+    std::clog << tmp << std::endl;
+#endif
+
     this->callback(this->chunk, length);
 }
 
