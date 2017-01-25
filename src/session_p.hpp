@@ -69,27 +69,28 @@ public:
 typedef std::function<void(const Chunk &, std::size_t)> ReadCallback;
 
 
-class SocketReader {
+class SocketReader : public std::enable_shared_from_this<SocketReader> {
 public:
     SocketReader(Socket & socket, ReadCallback callback);
 
-    void operator () ();
+    void operator () (std::shared_ptr<Session> session);
     void onRead(const ErrorCode & ec, std::size_t length);
 
     Socket & socket;
     ReadCallback callback;
     Chunk chunk;
+    std::shared_ptr<Session> session;
 };
 
 
 typedef std::function<void()> WroteCallback;
 
 
-class SocketWriter {
+class SocketWriter : public std::enable_shared_from_this<SocketWriter> {
 public:
     SocketWriter(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback);
 
-    void operator () ();
+    void operator () (std::shared_ptr<Session> session);
     void onWrote(const ErrorCode & ec, std::size_t wrote_length);
 
     Socket & socket;
@@ -97,6 +98,7 @@ public:
     const Chunk & chunk;
     std::size_t offset;
     std::size_t length;
+    std::shared_ptr<Session> session;
 };
 
 }

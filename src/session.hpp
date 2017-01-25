@@ -35,6 +35,7 @@ public:
     Session(Socket socket);
 
     void start();
+    void stop();
 
 private:
     Session(const Session &);

@@ -50,6 +50,11 @@ void Session::start() {
     _->doInnerResolve();
 }
 
+void Session::stop() {
+    _->inner_socket.close();
+    _->outer_socket.close();
+}
+
 
 Session::Private::Private(Socket socket)
     : self()
@@ -67,13 +72,15 @@ void Session::Private::doRead(Socket & socket, ReadCallback callback) {
     namespace ph = std::placeholders;
     auto fn = std::bind(callback, this, ph::_1, ph::_2);
     auto reader = std::make_shared<SocketReader>(socket, fn);
-    (*reader)();
+    auto self = this->kungFuDeathGrip();
+    (*reader)(self);
 }
 
 void Session::Private::doWrite(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback) {
     auto fn = std::bind(callback, this);
     auto writer = std::make_shared<SocketWriter>(socket, chunk, length, fn);
-    (*writer)();
+    auto self = this->kungFuDeathGrip();
+    (*writer)(self);
 }
 
 void Session::Private::doInnerResolve() {
@@ -270,18 +277,26 @@ SocketReader::SocketReader(Socket & socket, ReadCallback callback)
     : socket(socket)
     , callback(callback)
     , chunk(createChunk())
+    , session()
 {}
 
-void SocketReader::operator ()() {
+void SocketReader::operator ()(std::shared_ptr<Session> session) {
     namespace ph = std::placeholders;
+    auto self = this->shared_from_this();
     auto buffer = boost::asio::buffer(this->chunk);
-    this->socket.async_read_some(buffer, std::bind(&SocketReader::onRead, this, ph::_1, ph::_2));
+    this->session = session;
+    this->socket.async_read_some(buffer, std::bind(&SocketReader::onRead, self, ph::_1, ph::_2));
 }
 
 void SocketReader::onRead(const ErrorCode & ec, std::size_t length) {
     if (ec) {
-        // TODO handle error
-        std::cerr << "on socket read " << ec.message() << std::endl;
+        if (ec == boost::asio::error::eof) {
+            std::cout << "end of file" << std::endl;
+        } else {
+            // TODO handle error
+            std::cerr << "on socket read " << ec.message() << std::endl;
+        }
+        this->session->stop();
         return;
     }
 
@@ -295,12 +310,15 @@ SocketWriter::SocketWriter(Socket & socket, const Chunk & chunk, std::size_t len
     , chunk(chunk)
     , offset(0)
     , length(length)
+    , session()
 {}
 
-void SocketWriter::operator ()() {
+void SocketWriter::operator ()(std::shared_ptr<Session> session) {
     namespace ph = std::placeholders;
+    auto self = this->shared_from_this();
     auto buffer = boost::asio::buffer(&this->chunk[this->offset], this->length);
-    this->socket.async_write_some(buffer, std::bind(&SocketWriter::onWrote, this, ph::_1, ph::_2));
+    this->session = session;
+    this->socket.async_write_some(buffer, std::bind(&SocketWriter::onWrote, self, ph::_1, ph::_2));
 }
 
 void SocketWriter::onWrote(const ErrorCode & ec, std::size_t wrote_length) {
@@ -314,7 +332,7 @@ void SocketWriter::onWrote(const ErrorCode & ec, std::size_t wrote_length) {
     this->length -= wrote_length;
 
     if (this->length > 0) {
-        (*this)();
+        (*this)(this->session);
         return;
     }
 
