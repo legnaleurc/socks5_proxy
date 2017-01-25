@@ -32,10 +32,15 @@ namespace s5p {
 
 class Session::Private {
 public:
+    typedef void (Session::Private::*ReadCallback)(const Chunk &, std::size_t);
+    typedef void (Session::Private::*WroteCallback)();
+
     Private(Socket socket);
 
     std::shared_ptr<Session> kungFuDeathGrip();
 
+    void doRead(Socket & socket, ReadCallback callback);
+    void doWrite(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback);
     void doInnerResolve();
     void onInnerResolved(const ErrorCode & ec, Resolver::iterator it);
     void doInnerConnect(Resolver::iterator it);

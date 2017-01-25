@@ -63,6 +63,19 @@ std::shared_ptr<Session> Session::Private::kungFuDeathGrip() {
     return this->self.lock();
 }
 
+void Session::Private::doRead(Socket & socket, ReadCallback callback) {
+    namespace ph = std::placeholders;
+    auto fn = std::bind(callback, this, ph::_1, ph::_2);
+    auto reader = std::make_shared<SocketReader>(socket, fn);
+    (*reader)();
+}
+
+void Session::Private::doWrite(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback) {
+    auto fn = std::bind(callback, this);
+    auto writer = std::make_shared<SocketWriter>(socket, chunk, length, fn);
+    (*writer)();
+}
+
 void Session::Private::doInnerResolve() {
     auto self = this->kungFuDeathGrip();
     auto fn = [self](const ErrorCode & ec, Resolver::iterator it) -> void {
@@ -120,15 +133,13 @@ void Session::Private::doInnerPhase1() {
     // METHODS
     chunk[2] = 0x00;
 
-    SocketWriter writer(this->inner_socket, chunk, 3, std::bind(&Session::Private::doInnerPhase2, this));
-    writer();
+    this->doWrite(this->inner_socket, chunk, 3, &Session::Private::doInnerPhase2);
 }
 
 void Session::Private::doInnerPhase2() {
     namespace ph = std::placeholders;
 
-    SocketReader reader(this->inner_socket, std::bind(&Session::Private::onInnerPhase2Read, this, ph::_1, ph::_2));
-    reader();
+    this->doRead(this->inner_socket, &Session::Private::onInnerPhase2Read);
 }
 
 void Session::Private::onInnerPhase2Read(const Chunk & buffer, std::size_t length) {
@@ -175,15 +186,11 @@ void Session::Private::doInnerPhase3() {
 
     std::size_t total_length = 3 + used_byte + 2;
 
-    SocketWriter writer(this->inner_socket, chunk, total_length, std::bind(&Session::Private::doInnerPhase4, this));
-    writer();
+    this->doWrite(this->inner_socket, chunk, total_length, &Session::Private::doInnerPhase4);
 }
 
 void Session::Private::doInnerPhase4() {
-    namespace ph = std::placeholders;
-
-    SocketReader reader(this->inner_socket, std::bind(&Session::Private::onInnerPhase4Read, this, ph::_1, ph::_2));
-    reader();
+    this->doRead(this->inner_socket, &Session::Private::onInnerPhase4Read);
 }
 
 void Session::Private::onInnerPhase4Read(const Chunk & buffer, std::size_t length) {
@@ -209,31 +216,19 @@ void Session::Private::onInnerPhase4Read(const Chunk & buffer, std::size_t lengt
 }
 
 void Session::Private::doOuterRead() {
-    namespace ph = std::placeholders;
-
-    SocketReader reader(this->outer_socket, std::bind(&Session::Private::onOuterRead, this, ph::_1, ph::_2));
-    reader();
+    this->doRead(this->outer_socket, &Session::Private::onOuterRead);
 }
 
 void Session::Private::onOuterRead(const Chunk & buffer, std::size_t length) {
-    namespace ph = std::placeholders;
-
-    SocketWriter writer(this->inner_socket, buffer, length, std::bind(&Session::Private::doOuterRead, this));
-    writer();
+    this->doWrite(this->inner_socket, buffer, length, &Session::Private::doOuterRead);
 }
 
 void Session::Private::doInnerRead() {
-    namespace ph = std::placeholders;
-
-    SocketReader reader(this->inner_socket, std::bind(&Session::Private::onInnerRead, this, ph::_1, ph::_2));
-    reader();
+    this->doRead(this->inner_socket, &Session::Private::onInnerRead);
 }
 
 void Session::Private::onInnerRead(const Chunk & buffer, std::size_t length) {
-    namespace ph = std::placeholders;
-
-    SocketWriter writer(this->outer_socket, buffer, length, std::bind(&Session::Private::doInnerRead, this));
-    writer();
+    this->doWrite(this->outer_socket, buffer, length, &Session::Private::doInnerRead);
 }
 
 std::size_t Session::Private::fillIpv4(Chunk & buffer, std::size_t offset) {
