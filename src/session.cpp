@@ -144,8 +144,6 @@ void Session::Private::doInnerPhase1() {
 }
 
 void Session::Private::doInnerPhase2() {
-    namespace ph = std::placeholders;
-
     this->doRead(this->inner_socket, &Session::Private::onInnerPhase2Read);
 }
 
