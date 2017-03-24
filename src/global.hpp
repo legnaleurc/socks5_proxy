@@ -34,7 +34,6 @@ typedef boost::asio::ip::address_v4 AddressV4;
 typedef boost::asio::ip::address_v6 AddressV6;
 typedef boost::asio::ip::tcp::acceptor Acceptor;
 typedef boost::asio::ip::tcp::endpoint EndPoint;
-typedef boost::asio::ip::tcp::resolver Resolver;
 typedef boost::asio::ip::tcp::socket Socket;
 typedef boost::system::error_code ErrorCode;
 

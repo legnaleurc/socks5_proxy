@@ -2,10 +2,11 @@ cmake_minimum_required(VERSION 3.6)
 
 project(socks5_proxy)
 
-find_package(Boost REQUIRED COMPONENTS system program_options)
+find_package(Boost REQUIRED COMPONENTS system program_options coroutine)
 find_package(Threads REQUIRED)
 
 set(HEADERS
+    "src/exception.hpp"
     "src/global.hpp"
     "src/global_p.hpp"
     "src/server.hpp"
@@ -13,6 +14,7 @@ set(HEADERS
     "src/session.hpp"
     "src/session_p.hpp")
 set(SOURCES
+    "src/exception.cpp"
     "src/main.cpp"
     "src/global.cpp"
     "src/server.cpp"
@@ -25,4 +27,5 @@ target_link_libraries(socks5_proxy
     Boost::disable_autolinking
     Boost::system
     Boost::program_options
+    Boost::coroutine
     Threads::Threads)

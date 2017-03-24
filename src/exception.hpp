@@ -20,44 +20,64 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef SESSION_HPP_
-#define SESSION_HPP_
+#ifndef EXCEPTION_HPP
+#define EXCEPTION_HPP
 
-#include "session.hpp"
+#include <boost/system/system_error.hpp>
 
-#include <boost/asio/spawn.hpp>
-
-#include <memory>
+#include <exception>
 
 
 namespace s5p {
 
-typedef boost::asio::yield_context YieldContext;
-typedef boost::asio::ip::tcp::resolver Resolver;
-typedef std::pair<Resolver::iterator, Resolver::iterator> ResolvedRange;
 
-class Session::Private {
+class BasicError : public std::exception {
 public:
-    Private(Socket socket);
-
-    std::shared_ptr<Session> kungFuDeathGrip();
-
-    void doStart(YieldContext yield);
-    ResolvedRange doInnerResolve(YieldContext yield);
-    bool doInnerConnect(YieldContext yield, Resolver::iterator it);
-    void doInnerSocks5(YieldContext yield);
-    void doInnerSocks5Phase1(YieldContext yield);
-    void doInnerSocks5Phase2(YieldContext yield);
-    void doProxying(YieldContext yield, Socket & input, Socket & output);
-
-    void doWrite(YieldContext yield, Socket & socket, const Chunk & chunk, std::size_t length);
-    std::size_t doRead(YieldContext yield, Socket & socket, Chunk & chunk);
-
-    std::weak_ptr<Session> self;
-    Socket outer_socket;
-    IOLoop & loop;
-    Socket inner_socket;
+    BasicError();
 };
+
+
+template<int id>
+class BasicBoostError : public BasicError {
+public:
+    explicit BasicBoostError(boost::system::system_error && e)
+        : BasicError()
+        , e_(e)
+    {
+    }
+
+    const boost::system::error_code & code() const {
+        return this->e_.code();
+    }
+
+    virtual const char * what() const noexcept {
+        return this->e_.what();
+    }
+
+private:
+    boost::system::system_error e_;
+};
+
+class BasicPlainError : public BasicError {
+public:
+    explicit BasicPlainError(const std::string & msg);
+
+    virtual const char * what() const noexcept;
+
+private:
+    std::string msg_;
+};
+
+class Socks5Error : public BasicPlainError {
+public:
+    explicit Socks5Error(const std::string & msg);
+};
+
+class EndOfFileError : public BasicError {
+};
+
+typedef BasicBoostError<1> ResolutionError;
+typedef BasicBoostError<2> ConnectionError;
 
 }
 

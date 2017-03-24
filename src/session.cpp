@@ -23,21 +23,58 @@
 #include "session_p.hpp"
 
 #include "global.hpp"
+#include "exception.hpp"
 
 #include <boost/lexical_cast.hpp>
 
 #include <iostream>
 
 
+namespace {
+
+std::size_t fillIpv4(s5p::Chunk & buffer, std::size_t offset) {
+    // ATYP
+    buffer[offset++] = 0x01;
+
+    // DST.ADDR
+    auto bytes = s5p::Application::instance().httpHostAsIpv4().to_bytes();
+    std::copy_n(std::begin(bytes), bytes.size(), std::next(std::begin(buffer), offset));
+
+    return 1 + bytes.size();
+}
+
+std::size_t fillIpv6(s5p::Chunk & buffer, std::size_t offset) {
+    // ATYP
+    buffer[offset++] = 0x04;
+
+    // DST.ADDR
+    auto bytes = s5p::Application::instance().httpHostAsIpv6().to_bytes();
+    std::copy_n(std::begin(bytes), bytes.size(), std::next(std::begin(buffer), offset));
+
+    return 1 + bytes.size();
+}
+
+std::size_t fillFqdn(s5p::Chunk & buffer, std::size_t offset) {
+    // ATYP
+    buffer[offset++] = 0x03;
+
+    // DST.ADDR
+    const std::string & hostname = s5p::Application::instance().httpHostAsFqdn();
+    buffer[offset++] = static_cast<uint8_t>(hostname.size());
+    std::copy(std::begin(hostname), std::end(hostname), std::next(std::begin(buffer), offset));
+
+    return 1 + 1 + hostname.size();
+}
+
+}
+
+
 using s5p::Session;
 using s5p::Socket;
 using s5p::Resolver;
+using s5p::ResolvedRange;
 using s5p::ErrorCode;
 using s5p::Chunk;
-using s5p::SocketReader;
-using s5p::SocketWriter;
-using s5p::ReadCallback;
-using s5p::WroteCallback;
 
 
 Session::Session(Socket socket)
@@ -46,8 +83,9 @@ Session::Session(Socket socket)
 }
 
 void Session::start() {
+    namespace ph = std::placeholders;
     _->self = this->shared_from_this();
-    _->doInnerResolve();
+    boost::asio::spawn(_->loop, std::bind(&Session::Private::doStart, _, ph::_1));
 }
 
 void Session::stop() {
@@ -77,8 +115,8 @@ void Session::stop() {
 Session::Private::Private(Socket socket)
     : self()
     , outer_socket(std::move(socket))
-    , inner_socket(this->outer_socket.get_io_service())
-    , resolver(this->outer_socket.get_io_service())
+    , loop(this->outer_socket.get_io_service())
+    , inner_socket(this->loop)
 {
 }
 
@@ -86,70 +124,117 @@ std::shared_ptr<Session> Session::Private::kungFuDeathGrip() {
     return this->self.lock();
 }
 
-void Session::Private::doRead(Socket & socket, ReadCallback callback) {
+void Session::Private::doStart(YieldContext yield) {
+    auto self = this->kungFuDeathGrip();
+    bool ok = false;
+
+    try {
+        auto resolvedRange = this->doInnerResolve(yield);
+        for (auto it = resolvedRange.first; !ok && it != resolvedRange.second; ++it) {
+            ok = this->doInnerConnect(yield, it);
+        }
+        if (!ok) {
+            std::cerr << "no resolved address is available" << std::endl;
+            return;
+        }
+    } catch (ResolutionError & e) {
+        std::cerr << "cannot resolve the domain: " << e.code() << std::endl;
+        return;
+    }
+
+    try {
+        this->doInnerSocks5(yield);
+    } catch (EndOfFileError &) {
+        self->stop();
+        return;
+    } catch (Socks5Error & e) {
+        std::cerr << "socks5 auth error: " << e.what() << std::endl;
+        return;
+    } catch (ConnectionError & e) {
+        std::cerr << "socks5 connection error: " << e.code() << std::endl;
+        return;
+    }
+
     namespace ph = std::placeholders;
-    auto fn = std::bind(callback, this, ph::_1, ph::_2);
-    auto reader = std::make_shared<SocketReader>(socket, fn);
-    auto self = this->kungFuDeathGrip();
-    (*reader)(self);
+    boost::asio::spawn(this->loop, [this](YieldContext yield) -> void {
+        this->doProxying(yield, this->outer_socket, this->inner_socket);
+    });
+    boost::asio::spawn(this->loop, [this](YieldContext yield) -> void {
+        this->doProxying(yield, this->inner_socket, this->outer_socket);
+    });
 }
 
-void Session::Private::doWrite(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback) {
-    auto fn = std::bind(callback, this);
-    auto writer = std::make_shared<SocketWriter>(socket, chunk, length, fn);
+std::size_t Session::Private::doRead(YieldContext yield, Socket & socket, Chunk & chunk) {
     auto self = this->kungFuDeathGrip();
-    (*writer)(self);
+    auto buffer = boost::asio::buffer(chunk);
+    try {
+        auto length = socket.async_read_some(buffer, yield);
+        return length;
+    } catch (boost::system::system_error & e) {
+        if (e.code() == boost::asio::error::eof) {
+            throw EndOfFileError();
+        } else {
+            throw ConnectionError(std::move(e));
+        }
+    }
+    return 0;
 }
 
-void Session::Private::doInnerResolve() {
-    auto self = this->kungFuDeathGrip();
-    auto fn = [self](const ErrorCode & ec, Resolver::iterator it) -> void {
-        self->_->onInnerResolved(ec, it);
-    };
+void Session::Private::doWrite(YieldContext yield, Socket & socket, const Chunk & chunk, std::size_t length) {
+    try {
+        std::size_t offset = 0;
+        while (length > 0) {
+            auto buffer = boost::asio::buffer(&chunk[offset], length);
+            auto wrote_length = socket.async_write_some(buffer, yield);
+            offset += wrote_length;
+            length -= wrote_length;
+        }
+    } catch (boost::system::system_error & e) {
+        throw ConnectionError(std::move(e));
+    }
+}
 
+ResolvedRange Session::Private::doInnerResolve(YieldContext yield) {
+    auto self = this->kungFuDeathGrip();
+
+    Resolver resolver(this->loop);
+    auto host = Application::instance().socks5Host();
     auto port = boost::lexical_cast<std::string>(Application::instance().socks5Port());
-    this->resolver.async_resolve({
-        Application::instance().socks5Host(),
-        port,
-    }, fn);
-}
 
-void Session::Private::onInnerResolved(const ErrorCode & ec, Resolver::iterator it) {
-    // TODO handle error
-    if (ec) {
-        std::cerr << "onResolved failed" << ec << std::endl;
-        return;
+    try {
+        auto it = resolver.async_resolve({
+            host,
+            port,
+        }, yield);
+        return {it, Resolver::iterator()};
+    } catch (boost::system::system_error & e) {
+        throw ResolutionError(std::move(e));
     }
 
-    this->doInnerConnect(it);
+    return {Resolver::iterator(), Resolver::iterator()};
 }
 
-void Session::Private::doInnerConnect(Resolver::iterator it) {
+bool Session::Private::doInnerConnect(YieldContext yield, Resolver::iterator it) {
     if (Resolver::iterator() == it) {
-        return;
+        return false;
     }
 
-    auto self = this->kungFuDeathGrip();
-    auto fn = [self, it](const ErrorCode & ec) -> void {
-        self->_->onInnerConnected(ec, it);
-    };
-
-    this->inner_socket.async_connect(*it, fn);
-}
-
-void Session::Private::onInnerConnected(const ErrorCode & ec, Resolver::iterator it) {
-    if (ec) {
-        std::cerr << "onInnerConnected failed " << ec.message() << std::endl;
+    try {
+        this->inner_socket.async_connect(*it, yield);
+    } catch (boost::system::system_error & e) {
         this->inner_socket.close();
-        it = std::next(it);
-        this->doInnerConnect(it);
-        return;
+        return false;
     }
 
-    this->doInnerPhase1();
+    return true;
 }
 
-void Session::Private::doInnerPhase1() {
+void Session::Private::doInnerSocks5(YieldContext yield) {
+    this->doInnerSocks5Phase1(yield);
+    this->doInnerSocks5Phase2(yield);
+}
+
+void Session::Private::doInnerSocks5Phase1(YieldContext yield) {
     auto chunk = createChunk();
     // VER
     chunk[0] = 0x05;
@@ -158,28 +243,18 @@ void Session::Private::doInnerPhase1() {
     // METHODS
     chunk[2] = 0x00;
 
-    this->doWrite(this->inner_socket, chunk, 3, &Session::Private::doInnerPhase2);
-}
+    this->doWrite(yield, this->inner_socket, chunk, 3);
+    auto length = this->doRead(yield, this->inner_socket, chunk);
 
-void Session::Private::doInnerPhase2() {
-    this->doRead(this->inner_socket, &Session::Private::onInnerPhase2Read);
-}
-
-void Session::Private::onInnerPhase2Read(const Chunk & buffer, std::size_t length) {
     if (length < 2) {
-        std::cerr << "onInnerPhase2Read wrong auth header length" << std::endl;
-        return;
+        throw Socks5Error("wrong auth header length");
     }
-
-    if (buffer[1] != 0x00) {
-        std::cerr << "onInnerPhase2Read provided auth not supported" << std::endl;
-        return;
+    if (chunk[1] != 0x00) {
+        throw Socks5Error("provided auth not supported");
     }
-
-    this->doInnerPhase3();
 }
 
-void Session::Private::doInnerPhase3() {
+void Session::Private::doInnerSocks5Phase2(YieldContext yield) {
     auto chunk = createChunk();
     // VER
     chunk[0] = 0x05;
@@ -191,17 +266,16 @@ void Session::Private::doInnerPhase3() {
     std::size_t used_byte = 0;
     switch (Application::instance().httpHostType()) {
     case AddressType::IPV4:
-        used_byte = this->fillIpv4(chunk, 3);
+        used_byte = fillIpv4(chunk, 3);
         break;
     case AddressType::IPV6:
-        used_byte = this->fillIpv6(chunk, 3);
+        used_byte = fillIpv6(chunk, 3);
         break;
     case AddressType::FQDN:
-        used_byte = this->fillFqdn(chunk, 3);
+        used_byte = fillFqdn(chunk, 3);
         break;
     default:
-        std::cerr << "unknown target http address" << std::endl;
-        return;
+        throw Socks5Error("unknown target http address");
     }
 
     // DST.PORT
@@ -209,20 +283,16 @@ void Session::Private::doInnerPhase3() {
 
     std::size_t total_length = 3 + used_byte + 2;
 
-    this->doWrite(this->inner_socket, chunk, total_length, &Session::Private::doInnerPhase4);
-}
+    this->doWrite(yield, this->inner_socket, chunk, total_length);
+    auto length = this->doRead(yield, this->inner_socket, chunk);
 
-void Session::Private::doInnerPhase4() {
-    this->doRead(this->inner_socket, &Session::Private::onInnerPhase4Read);
-}
-
-void Session::Private::onInnerPhase4Read(const Chunk & buffer, std::size_t length) {
-    if (buffer[1] != 0x00) {
-        std::cerr << "onInnerPhase4Read server replied error" << std::endl;
-        return;
+    if (length < 3) {
+        throw Socks5Error("server replied error");
     }
-
-    switch (buffer[3]) {
+    if (chunk[1] != 0x00) {
+        throw Socks5Error("server replied error");
+    }
+    switch (chunk[3]) {
     case 0x01:
         break;
     case 0x03:
@@ -230,133 +300,21 @@ void Session::Private::onInnerPhase4Read(const Chunk & buffer, std::size_t lengt
     case 0x04:
         break;
     default:
-        std::cerr << "onInnerPhase4Read unknown address type" << std::endl;
-        return;
+        throw Socks5Error("unknown address type");
     }
-
-    this->doOuterRead();
-    this->doInnerRead();
 }
 
-void Session::Private::doOuterRead() {
-    this->doRead(this->outer_socket, &Session::Private::onOuterRead);
-}
-
-void Session::Private::onOuterRead(const Chunk & buffer, std::size_t length) {
-    this->doWrite(this->inner_socket, buffer, length, &Session::Private::doOuterRead);
-}
-
-void Session::Private::doInnerRead() {
-    this->doRead(this->inner_socket, &Session::Private::onInnerRead);
-}
-
-void Session::Private::onInnerRead(const Chunk & buffer, std::size_t length) {
-    this->doWrite(this->outer_socket, buffer, length, &Session::Private::doInnerRead);
-}
-
-std::size_t Session::Private::fillIpv4(Chunk & buffer, std::size_t offset) {
-    // ATYP
-    buffer[offset++] = 0x01;
-
-    // DST.ADDR
-    auto bytes = Application::instance().httpHostAsIpv4().to_bytes();
-    std::copy_n(std::begin(bytes), bytes.size(), std::next(std::begin(buffer), offset));
-
-    return 1 + bytes.size();
-}
-
-std::size_t Session::Private::fillIpv6(Chunk & buffer, std::size_t offset) {
-    // ATYP
-    buffer[offset++] = 0x04;
-
-    // DST.ADDR
-    auto bytes = Application::instance().httpHostAsIpv6().to_bytes();
-    std::copy_n(std::begin(bytes), bytes.size(), std::next(std::begin(buffer), offset));
-
-    return 1 + bytes.size();
-}
-
-std::size_t Session::Private::fillFqdn(Chunk & buffer, std::size_t offset) {
-    // ATYP
-    buffer[offset++] = 0x03;
-
-    // DST.ADDR
-    const std::string & hostname = Application::instance().httpHostAsFqdn();
-    buffer[offset++] = static_cast<uint8_t>(hostname.size());
-    std::copy(std::begin(hostname), std::end(hostname), std::next(std::begin(buffer), offset));
-
-    return 1 + 1 + hostname.size();
-}
-
-
-SocketReader::SocketReader(Socket & socket, ReadCallback callback)
-    : socket(socket)
-    , callback(callback)
-    , chunk(createChunk())
-    , session()
-{}
-
-void SocketReader::operator ()(std::shared_ptr<Session> session) {
-    namespace ph = std::placeholders;
-    auto self = this->shared_from_this();
-    auto buffer = boost::asio::buffer(this->chunk);
-    this->session = session;
-    this->socket.async_read_some(buffer, std::bind(&SocketReader::onRead, self, ph::_1, ph::_2));
-}
-
-void SocketReader::onRead(const ErrorCode & ec, std::size_t length) {
-    if (ec) {
-        if (ec == boost::asio::error::eof) {
-            std::cout << "end of file" << std::endl;
-        } else {
-            // TODO handle error
-            std::cerr << "on socket read " << ec.message() << std::endl;
+void Session::Private::doProxying(YieldContext yield, Socket & input, Socket & output) {
+    auto self = this->kungFuDeathGrip();
+    auto chunk = createChunk();
+    try {
+        while (true) {
+            auto length = this->doRead(yield, input, chunk);
+            this->doWrite(yield, output, chunk, length);
         }
-        this->session->stop();
-        return;
+    } catch (EndOfFileError & e) {
+        self->stop();
+    } catch (ConnectionError & e) {
+        std::cerr << "connection error: " << e.code() << std::endl;
     }
-
-#ifndef NDEBUG
-    std::clog << "received " << length << " bytes" << std::endl;
-    std::string tmp(reinterpret_cast<const char*>(&this->chunk[0]), length);
-    std::clog << tmp << std::endl;
-#endif
-
-    this->callback(this->chunk, length);
-}
-
-
-SocketWriter::SocketWriter(Socket & socket, const Chunk & chunk, std::size_t length, WroteCallback callback)
-    : socket(socket)
-    , callback(callback)
-    , chunk(chunk)
-    , offset(0)
-    , length(length)
-    , session()
-{}
-
-void SocketWriter::operator ()(std::shared_ptr<Session> session) {
-    namespace ph = std::placeholders;
-    auto self = this->shared_from_this();
-    auto buffer = boost::asio::buffer(&this->chunk[this->offset], this->length);
-    this->session = session;
-    this->socket.async_write_some(buffer, std::bind(&SocketWriter::onWrote, self, ph::_1, ph::_2));
-}
-
-void SocketWriter::onWrote(const ErrorCode & ec, std::size_t wrote_length) {
-    if (ec) {
-        // TODO handle error
-        std::cerr << "on socket write " << ec.message() << std::endl;
-        return;
-    }
-
-    this->offset += wrote_length;
-    this->length -= wrote_length;
-
-    if (this->length > 0) {
-        (*this)(this->session);
-        return;
-    }
-
-    this->callback();
 }

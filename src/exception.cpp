@@ -20,45 +20,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef SESSION_HPP_
-#define SESSION_HPP_
-
-#include "session.hpp"
-
-#include <boost/asio/spawn.hpp>
-
-#include <memory>
+#include "exception.hpp"
 
 
-namespace s5p {
+using s5p::BasicError;
+using s5p::BasicPlainError;
+using s5p::Socks5Error;
 
-typedef boost::asio::yield_context YieldContext;
-typedef boost::asio::ip::tcp::resolver Resolver;
-typedef std::pair<Resolver::iterator, Resolver::iterator> ResolvedRange;
 
-class Session::Private {
-public:
-    Private(Socket socket);
+BasicError::BasicError()
+    : std::exception()
+{}
 
-    std::shared_ptr<Session> kungFuDeathGrip();
+BasicPlainError::BasicPlainError(const std::string & msg)
+    : BasicError()
+    , msg_(msg)
+{}
 
-    void doStart(YieldContext yield);
-    ResolvedRange doInnerResolve(YieldContext yield);
-    bool doInnerConnect(YieldContext yield, Resolver::iterator it);
-    void doInnerSocks5(YieldContext yield);
-    void doInnerSocks5Phase1(YieldContext yield);
-    void doInnerSocks5Phase2(YieldContext yield);
-    void doProxying(YieldContext yield, Socket & input, Socket & output);
-
-    void doWrite(YieldContext yield, Socket & socket, const Chunk & chunk, std::size_t length);
-    std::size_t doRead(YieldContext yield, Socket & socket, Chunk & chunk);
-
-    std::weak_ptr<Session> self;
-    Socket outer_socket;
-    IOLoop & loop;
-    Socket inner_socket;
-};
-
+const char * BasicPlainError::what() const noexcept {
+    return this->msg_.c_str();
 }
 
-#endif
+Socks5Error::Socks5Error(const std::string & msg)
+    : BasicPlainError(msg)
+{}
