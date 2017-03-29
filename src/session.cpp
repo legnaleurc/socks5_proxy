@@ -66,6 +66,22 @@ std::size_t fillFqdn(s5p::Chunk & buffer, std::size_t offset) {
     return 1 + 1 + hostname.size();
 }
 
+void reportError(const std::string & msg, const s5p::BasicBoostError & e) {
+    std::cerr << msg << " (code: " << e.code() << ", what: " << e.what() << ")" << std::endl;
+}
+
+void reportError(const std::string & msg, const s5p::BasicError & e) {
+    std::cerr << msg << " (what: " << e.what() << ")" << std::endl;
+}
+
+void reportError(const std::string & msg, const std::exception & e) {
+    std::cerr << msg << " (what: " << e.what() << ")" << std::endl;
+}
+
+void reportError(const std::string & msg) {
+    std::cerr << msg << std::endl;
+}
+
 }
 
 
@@ -92,22 +108,22 @@ void Session::stop() {
     try {
         _->inner_socket.shutdown(Socket::shutdown_both);
     } catch (std::exception & e) {
-        std::cerr << "shutdown failed " << e.what() << std::endl;
+        reportError("inner socket shutdown failed", e);
     }
     try {
         _->inner_socket.close();
     } catch (std::exception & e) {
-        std::cerr << "close failed " << e.what() << std::endl;
+        reportError("inner socket close failed", e);
     }
     try {
         _->outer_socket.shutdown(Socket::shutdown_both);
     } catch (std::exception & e) {
-        std::cerr << "shutdown failed " << e.what() << std::endl;
+        reportError("outer socket shutdown failed", e);
     }
     try {
         _->outer_socket.close();
     } catch (std::exception & e) {
-        std::cerr << "close failed " << e.what() << std::endl;
+        reportError("outer socket close failed", e);
     }
 }
 
@@ -134,11 +150,11 @@ void Session::Private::doStart(YieldContext yield) {
             ok = this->doInnerConnect(yield, it);
         }
         if (!ok) {
-            std::cerr << "no resolved address is available" << std::endl;
+            reportError("no resolved address is available");
             return;
         }
     } catch (ResolutionError & e) {
-        std::cerr << "cannot resolve the domain: " << e.code() << std::endl;
+        reportError("cannot resolve the domain", e);
         return;
     }
 
@@ -148,10 +164,10 @@ void Session::Private::doStart(YieldContext yield) {
         self->stop();
         return;
     } catch (Socks5Error & e) {
-        std::cerr << "socks5 auth error: " << e.what() << std::endl;
+        reportError("socks5 auth error", e);
         return;
     } catch (ConnectionError & e) {
-        std::cerr << "socks5 connection error: " << e.code() << std::endl;
+        reportError("socks5 connection error", e);
         return;
     }
 
@@ -315,6 +331,6 @@ void Session::Private::doProxying(YieldContext yield, Socket & input, Socket & o
     } catch (EndOfFileError & e) {
         self->stop();
     } catch (ConnectionError & e) {
-        std::cerr << "connection error: " << e.code() << std::endl;
+        reportError("connection error", e);
     }
 }

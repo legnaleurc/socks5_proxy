@@ -24,12 +24,35 @@
 
 
 using s5p::BasicError;
+using s5p::BasicBoostError;
+using s5p::ResolutionError;
+using s5p::ConnectionError;
 using s5p::BasicPlainError;
 using s5p::Socks5Error;
 
 
 BasicError::BasicError()
     : std::exception()
+{}
+
+BasicBoostError::BasicBoostError(boost::system::system_error && e)
+    : e_(e)
+{}
+
+const boost::system::error_code & BasicBoostError::code() const {
+    return this->e_.code();
+}
+
+const char * BasicBoostError::what() const noexcept {
+    return this->e_.what();
+}
+
+ResolutionError::ResolutionError(boost::system::system_error && e)
+    : BasicBoostError(std::move(e))
+{}
+
+ConnectionError::ConnectionError(boost::system::system_error && e)
+    : BasicBoostError(std::move(e))
 {}
 
 BasicPlainError::BasicPlainError(const std::string & msg)

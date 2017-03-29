@@ -37,26 +37,30 @@ public:
 };
 
 
-template<int id>
 class BasicBoostError : public BasicError {
 public:
-    explicit BasicBoostError(boost::system::system_error && e)
-        : BasicError()
-        , e_(e)
-    {
-    }
+    explicit BasicBoostError(boost::system::system_error && e);
 
-    const boost::system::error_code & code() const {
-        return this->e_.code();
-    }
+    const boost::system::error_code & code() const;
 
-    virtual const char * what() const noexcept {
-        return this->e_.what();
-    }
+    virtual const char * what() const noexcept;
 
 private:
     boost::system::system_error e_;
 };
+
+
+class ResolutionError : public BasicBoostError {
+public:
+    explicit ResolutionError(boost::system::system_error && e);
+};
+
+
+class ConnectionError : public BasicBoostError {
+public:
+    explicit ConnectionError(boost::system::system_error && e);
+};
+
 
 class BasicPlainError : public BasicError {
 public:
@@ -68,16 +72,15 @@ private:
     std::string msg_;
 };
 
+
 class Socks5Error : public BasicPlainError {
 public:
     explicit Socks5Error(const std::string & msg);
 };
 
+
 class EndOfFileError : public BasicError {
 };
-
-typedef BasicBoostError<1> ResolutionError;
-typedef BasicBoostError<2> ConnectionError;
 
 }
 
