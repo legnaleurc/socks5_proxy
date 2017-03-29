@@ -163,7 +163,6 @@ void Session::Private::doStart(YieldContext yield) {
 }
 
 std::size_t Session::Private::doRead(YieldContext yield, Socket & socket, Chunk & chunk) {
-    auto self = this->kungFuDeathGrip();
     auto buffer = boost::asio::buffer(chunk);
     try {
         auto length = socket.async_read_some(buffer, yield);
@@ -193,8 +192,6 @@ void Session::Private::doWrite(YieldContext yield, Socket & socket, const Chunk 
 }
 
 ResolvedRange Session::Private::doInnerResolve(YieldContext yield) {
-    auto self = this->kungFuDeathGrip();
-
     Resolver resolver(this->loop);
     auto host = Application::instance().socks5Host();
     auto port = boost::lexical_cast<std::string>(Application::instance().socks5Port());
