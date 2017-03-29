@@ -23,6 +23,8 @@
 #ifndef GLOBAL_HPP
 #define GLOBAL_HPP
 
+#include "exception.hpp"
+
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
@@ -80,6 +82,10 @@ private:
 
 Chunk createChunk();
 void putBigEndian(uint8_t * dst, uint16_t native);
+void reportError(const std::string & msg);
+void reportError(const std::string & msg, const boost::system::error_code & ec);
+void reportError(const std::string & msg, const s5p::BasicBoostError & e);
+void reportError(const std::string & msg, const std::exception & e);
 
 }
 

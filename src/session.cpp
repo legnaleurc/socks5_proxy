@@ -27,8 +27,6 @@
 
 #include <boost/lexical_cast.hpp>
 
-#include <iostream>
-
 
 namespace {
 
@@ -64,22 +62,6 @@ std::size_t fillFqdn(s5p::Chunk & buffer, std::size_t offset) {
     std::copy(std::begin(hostname), std::end(hostname), std::next(std::begin(buffer), offset));
 
     return 1 + 1 + hostname.size();
-}
-
-void reportError(const std::string & msg, const s5p::BasicBoostError & e) {
-    std::cerr << msg << " (code: " << e.code() << ", what: " << e.what() << ")" << std::endl;
-}
-
-void reportError(const std::string & msg, const s5p::BasicError & e) {
-    std::cerr << msg << " (what: " << e.what() << ")" << std::endl;
-}
-
-void reportError(const std::string & msg, const std::exception & e) {
-    std::cerr << msg << " (what: " << e.what() << ")" << std::endl;
-}
-
-void reportError(const std::string & msg) {
-    std::cerr << msg << std::endl;
 }
 
 }

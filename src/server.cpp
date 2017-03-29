@@ -26,8 +26,6 @@
 
 #include <boost/asio/ip/v6_only.hpp>
 
-#include <iostream>
-
 
 using s5p::Server;
 
@@ -65,7 +63,7 @@ void Server::Private::doV4Listen(uint16_t port) {
 void Server::Private::doV4Accept() {
     this->v4_acceptor.async_accept(this->socket, [this](const ErrorCode & ec) -> void {
         if (ec) {
-            std::cerr << "doV4Accept " << ec.message() << std::endl;
+            reportError("doV4Accept", ec);
         } else {
             std::make_shared<Session>(std::move(this->socket))->start();
         }
@@ -86,7 +84,7 @@ void Server::Private::doV6Listen(uint16_t port) {
 void Server::Private::doV6Accept() {
     this->v6_acceptor.async_accept(this->socket, [this](const ErrorCode & ec) -> void {
         if (ec) {
-            std::cerr << "doV6Accept " << ec.message() << std::endl;
+            reportError("doV6Accept", ec);
         } else {
             std::make_shared<Session>(std::move(this->socket))->start();
         }

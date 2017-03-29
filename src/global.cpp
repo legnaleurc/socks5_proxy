@@ -22,6 +22,8 @@
  */
 #include "global_p.hpp"
 
+#include "exception.hpp"
+
 #include <boost/asio/signal_set.hpp>
 
 #include <iostream>
@@ -74,7 +76,7 @@ int Application::prepare() {
     try {
         args = _->parseOptions(options);
     } catch (std::exception & e) {
-        std::cerr << e.what() << std::endl;
+        reportError("invalid argument", e);
         return 1;
     }
 
@@ -101,7 +103,7 @@ int Application::prepare() {
     }
     auto errorString = sout.str();
     if (!errorString.empty()) {
-        std::cerr << errorString << std::endl;
+        reportError(errorString);
         return 1;
     }
 
@@ -212,7 +214,7 @@ OptionMap Application::Private::parseOptions(const Options & options) const {
 void Application::Private::onSystemSignal(const ErrorCode & ec, int signal_number) {
     if (ec) {
         // TODO handle error
-        std::cerr << "signal " << ec.message() << std::endl;
+        reportError("signal", ec);
     }
     std::cout << "received " << signal_number << std::endl;
     this->loop.stop();
@@ -265,6 +267,22 @@ void putBigEndian(uint8_t * dst, uint16_t native) {
 #else
     *view = boost::endian::native_to_big(native);
 #endif
+}
+
+void reportError(const std::string & msg) {
+    std::cerr << msg << std::endl;
+}
+
+void reportError(const std::string & msg, const boost::system::error_code & ec) {
+    std::cerr << msg << " (code: " << ec << ", what: " << ec.message() << ")" << std::endl;
+}
+
+void reportError(const std::string & msg, const BasicBoostError & e) {
+    std::cerr << msg << " (code: " << e.code() << ", what: " << e.what() << ")" << std::endl;
+}
+
+void reportError(const std::string & msg, const std::exception & e) {
+    std::cerr << msg << " (what: " << e.what() << ")" << std::endl;
 }
 
 }
