@@ -22,6 +22,7 @@ set(SOURCES
 
 add_executable(socks5_proxy ${SOURCES} ${HEADERS})
 target_compile_features(socks5_proxy PRIVATE cxx_auto_type)
+target_compile_definitions(socks5_proxy PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
 target_link_libraries(socks5_proxy
     Boost::dynamic_linking
     Boost::disable_autolinking
