@@ -23,7 +23,8 @@
 #ifndef GLOBAL_HPP
 #define GLOBAL_HPP
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 
 namespace s5p {

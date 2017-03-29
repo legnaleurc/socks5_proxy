@@ -22,6 +22,8 @@
  */
 #include "global_p.hpp"
 
+#include <boost/asio/signal_set.hpp>
+
 #include <iostream>
 #include <sstream>
 #include <cassert>

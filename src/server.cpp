@@ -24,6 +24,8 @@
 
 #include "session.hpp"
 
+#include <boost/asio/ip/v6_only.hpp>
+
 #include <iostream>
 
 
