@@ -30,29 +30,29 @@
 using s5p::Server;
 
 
-Server::Server(boost::asio::io_service & loop)
+Server::Server(IOLoop & loop)
     : _(std::make_shared<Server::Private>(loop))
 {
 }
 
-void Server::listenV4(uint16_t port) {
-    _->doV4Listen(port);
-    _->doV4Accept();
+void Server::listen_v4(uint16_t port) {
+    _->do_v4_listen(port);
+    _->do_v4_accept();
 }
 
-void Server::listenV6(uint16_t port) {
-    _->doV6Listen(port);
-    _->doV6Accept();
+void Server::listen_v6(uint16_t port) {
+    _->do_v6_listen(port);
+    _->do_v6_accept();
 }
 
-Server::Private::Private(boost::asio::io_service & loop)
+Server::Private::Private(IOLoop & loop)
     : v4_acceptor(loop)
     , v6_acceptor(loop)
     , socket(loop)
 {
 }
 
-void Server::Private::doV4Listen(uint16_t port) {
+void Server::Private::do_v4_listen(uint16_t port) {
     EndPoint ep(boost::asio::ip::tcp::v4(), port);
     this->v4_acceptor.open(ep.protocol());
     this->v4_acceptor.set_option(Acceptor::reuse_address(true));
@@ -60,19 +60,19 @@ void Server::Private::doV4Listen(uint16_t port) {
     this->v4_acceptor.listen();
 }
 
-void Server::Private::doV4Accept() {
+void Server::Private::do_v4_accept() {
     this->v4_acceptor.async_accept(this->socket, [this](const ErrorCode & ec) -> void {
         if (ec) {
-            reportError("doV4Accept", ec);
+            report_error("doV4Accept", ec);
         } else {
             std::make_shared<Session>(std::move(this->socket))->start();
         }
 
-        this->doV4Accept();
+        this->do_v4_accept();
     });
 }
 
-void Server::Private::doV6Listen(uint16_t port) {
+void Server::Private::do_v6_listen(uint16_t port) {
     EndPoint ep(boost::asio::ip::tcp::v6(), port);
     this->v6_acceptor.open(ep.protocol());
     this->v6_acceptor.set_option(Acceptor::reuse_address(true));
@@ -81,14 +81,14 @@ void Server::Private::doV6Listen(uint16_t port) {
     this->v6_acceptor.listen();
 }
 
-void Server::Private::doV6Accept() {
+void Server::Private::do_v6_accept() {
     this->v6_acceptor.async_accept(this->socket, [this](const ErrorCode & ec) -> void {
         if (ec) {
-            reportError("doV6Accept", ec);
+            report_error("doV6Accept", ec);
         } else {
             std::make_shared<Session>(std::move(this->socket))->start();
         }
 
-        this->doV6Accept();
+        this->do_v6_accept();
     });
 }

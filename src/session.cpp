@@ -30,34 +30,34 @@
 
 namespace {
 
-std::size_t fillIpv4(s5p::Chunk & buffer, std::size_t offset) {
+std::size_t fill_ipv4(s5p::Chunk & buffer, std::size_t offset) {
     // ATYP
     buffer[offset++] = 0x01;
 
     // DST.ADDR
-    auto bytes = s5p::Application::instance().httpHostAsIpv4().to_bytes();
+    auto bytes = s5p::Application::instance().get_http_host_as_ipv4().to_bytes();
     std::copy_n(std::begin(bytes), bytes.size(), std::next(std::begin(buffer), offset));
 
     return 1 + bytes.size();
 }
 
-std::size_t fillIpv6(s5p::Chunk & buffer, std::size_t offset) {
+std::size_t fill_ipv6(s5p::Chunk & buffer, std::size_t offset) {
     // ATYP
     buffer[offset++] = 0x04;
 
     // DST.ADDR
-    auto bytes = s5p::Application::instance().httpHostAsIpv6().to_bytes();
+    auto bytes = s5p::Application::instance().get_http_host_as_ipv6().to_bytes();
     std::copy_n(std::begin(bytes), bytes.size(), std::next(std::begin(buffer), offset));
 
     return 1 + bytes.size();
 }
 
-std::size_t fillFqdn(s5p::Chunk & buffer, std::size_t offset) {
+std::size_t fill_fqdn(s5p::Chunk & buffer, std::size_t offset) {
     // ATYP
     buffer[offset++] = 0x03;
 
     // DST.ADDR
-    const std::string & hostname = s5p::Application::instance().httpHostAsFqdn();
+    const std::string & hostname = s5p::Application::instance().get_http_host_as_fqdn();
     buffer[offset++] = static_cast<uint8_t>(hostname.size());
     std::copy(std::begin(hostname), std::end(hostname), std::next(std::begin(buffer), offset));
 
@@ -83,29 +83,29 @@ Session::Session(Socket socket)
 void Session::start() {
     namespace ph = std::placeholders;
     _->self = this->shared_from_this();
-    boost::asio::spawn(_->loop, std::bind(&Session::Private::doStart, _, ph::_1));
+    boost::asio::spawn(_->loop, std::bind(&Session::Private::do_start, _, ph::_1));
 }
 
 void Session::stop() {
     try {
         _->inner_socket.shutdown(Socket::shutdown_both);
     } catch (std::exception & e) {
-        reportError("inner socket shutdown failed", e);
+        report_error("inner socket shutdown failed", e);
     }
     try {
         _->inner_socket.close();
     } catch (std::exception & e) {
-        reportError("inner socket close failed", e);
+        report_error("inner socket close failed", e);
     }
     try {
         _->outer_socket.shutdown(Socket::shutdown_both);
     } catch (std::exception & e) {
-        reportError("outer socket shutdown failed", e);
+        report_error("outer socket shutdown failed", e);
     }
     try {
         _->outer_socket.close();
     } catch (std::exception & e) {
-        reportError("outer socket close failed", e);
+        report_error("outer socket close failed", e);
     }
 }
 
@@ -118,51 +118,51 @@ Session::Private::Private(Socket socket)
 {
 }
 
-std::shared_ptr<Session> Session::Private::kungFuDeathGrip() {
+std::shared_ptr<Session> Session::Private::kung_fu_death_grip() {
     return this->self.lock();
 }
 
-void Session::Private::doStart(YieldContext yield) {
-    auto self = this->kungFuDeathGrip();
+void Session::Private::do_start(YieldContext yield) {
+    auto self = this->kung_fu_death_grip();
     bool ok = false;
 
     try {
-        auto resolvedRange = this->doInnerResolve(yield);
+        auto resolvedRange = this->do_inner_resolve(yield);
         for (auto it = resolvedRange.first; !ok && it != resolvedRange.second; ++it) {
-            ok = this->doInnerConnect(yield, it);
+            ok = this->do_inner_connect(yield, it);
         }
         if (!ok) {
-            reportError("no resolved address is available");
+            report_error("no resolved address is available");
             return;
         }
     } catch (ResolutionError & e) {
-        reportError("cannot resolve the domain", e);
+        report_error("cannot resolve the domain", e);
         return;
     }
 
     try {
-        this->doInnerSocks5(yield);
+        this->do_inner_socks5(yield);
     } catch (EndOfFileError &) {
         self->stop();
         return;
     } catch (Socks5Error & e) {
-        reportError("socks5 auth error", e);
+        report_error("socks5 auth error", e);
         return;
     } catch (ConnectionError & e) {
-        reportError("socks5 connection error", e);
+        report_error("socks5 connection error", e);
         return;
     }
 
     namespace ph = std::placeholders;
     boost::asio::spawn(this->loop, [this](YieldContext yield) -> void {
-        this->doProxying(yield, this->outer_socket, this->inner_socket);
+        this->do_proxying(yield, this->outer_socket, this->inner_socket);
     });
     boost::asio::spawn(this->loop, [this](YieldContext yield) -> void {
-        this->doProxying(yield, this->inner_socket, this->outer_socket);
+        this->do_proxying(yield, this->inner_socket, this->outer_socket);
     });
 }
 
-std::size_t Session::Private::doRead(YieldContext yield, Socket & socket, Chunk & chunk) {
+std::size_t Session::Private::do_read(YieldContext yield, Socket & socket, Chunk & chunk) {
     auto buffer = boost::asio::buffer(chunk);
     try {
         auto length = socket.async_read_some(buffer, yield);
@@ -177,7 +177,7 @@ std::size_t Session::Private::doRead(YieldContext yield, Socket & socket, Chunk 
     return 0;
 }
 
-void Session::Private::doWrite(YieldContext yield, Socket & socket, const Chunk & chunk, std::size_t length) {
+void Session::Private::do_write(YieldContext yield, Socket & socket, const Chunk & chunk, std::size_t length) {
     try {
         std::size_t offset = 0;
         while (length > 0) {
@@ -191,10 +191,10 @@ void Session::Private::doWrite(YieldContext yield, Socket & socket, const Chunk 
     }
 }
 
-ResolvedRange Session::Private::doInnerResolve(YieldContext yield) {
+ResolvedRange Session::Private::do_inner_resolve(YieldContext yield) {
     Resolver resolver(this->loop);
-    auto host = Application::instance().socks5Host();
-    auto port = boost::lexical_cast<std::string>(Application::instance().socks5Port());
+    auto host = Application::instance().get_socks5_host();
+    auto port = boost::lexical_cast<std::string>(Application::instance().get_socks5_port());
 
     try {
         auto it = resolver.async_resolve({
@@ -209,7 +209,7 @@ ResolvedRange Session::Private::doInnerResolve(YieldContext yield) {
     return {Resolver::iterator(), Resolver::iterator()};
 }
 
-bool Session::Private::doInnerConnect(YieldContext yield, Resolver::iterator it) {
+bool Session::Private::do_inner_connect(YieldContext yield, Resolver::iterator it) {
     if (Resolver::iterator() == it) {
         return false;
     }
@@ -224,13 +224,13 @@ bool Session::Private::doInnerConnect(YieldContext yield, Resolver::iterator it)
     return true;
 }
 
-void Session::Private::doInnerSocks5(YieldContext yield) {
-    this->doInnerSocks5Phase1(yield);
-    this->doInnerSocks5Phase2(yield);
+void Session::Private::do_inner_socks5(YieldContext yield) {
+    this->do_inner_socks5_phase1(yield);
+    this->do_inner_socks5_phase2(yield);
 }
 
-void Session::Private::doInnerSocks5Phase1(YieldContext yield) {
-    auto chunk = createChunk();
+void Session::Private::do_inner_socks5_phase1(YieldContext yield) {
+    auto chunk = create_chunk();
     // VER
     chunk[0] = 0x05;
     // NMETHODS
@@ -238,8 +238,8 @@ void Session::Private::doInnerSocks5Phase1(YieldContext yield) {
     // METHODS
     chunk[2] = 0x00;
 
-    this->doWrite(yield, this->inner_socket, chunk, 3);
-    auto length = this->doRead(yield, this->inner_socket, chunk);
+    this->do_write(yield, this->inner_socket, chunk, 3);
+    auto length = this->do_read(yield, this->inner_socket, chunk);
 
     if (length < 2) {
         throw Socks5Error("wrong auth header length");
@@ -249,8 +249,8 @@ void Session::Private::doInnerSocks5Phase1(YieldContext yield) {
     }
 }
 
-void Session::Private::doInnerSocks5Phase2(YieldContext yield) {
-    auto chunk = createChunk();
+void Session::Private::do_inner_socks5_phase2(YieldContext yield) {
+    auto chunk = create_chunk();
     // VER
     chunk[0] = 0x05;
     // CMD
@@ -259,27 +259,27 @@ void Session::Private::doInnerSocks5Phase2(YieldContext yield) {
     chunk[2] = 0x00;
 
     std::size_t used_byte = 0;
-    switch (Application::instance().httpHostType()) {
+    switch (Application::instance().get_http_host_type()) {
     case AddressType::IPV4:
-        used_byte = fillIpv4(chunk, 3);
+        used_byte = fill_ipv4(chunk, 3);
         break;
     case AddressType::IPV6:
-        used_byte = fillIpv6(chunk, 3);
+        used_byte = fill_ipv6(chunk, 3);
         break;
     case AddressType::FQDN:
-        used_byte = fillFqdn(chunk, 3);
+        used_byte = fill_fqdn(chunk, 3);
         break;
     default:
         throw Socks5Error("unknown target http address");
     }
 
     // DST.PORT
-    putBigEndian(&chunk[3 + used_byte], Application::instance().httpPort());
+    put_big_endian(&chunk[3 + used_byte], Application::instance().get_http_port());
 
     std::size_t total_length = 3 + used_byte + 2;
 
-    this->doWrite(yield, this->inner_socket, chunk, total_length);
-    auto length = this->doRead(yield, this->inner_socket, chunk);
+    this->do_write(yield, this->inner_socket, chunk, total_length);
+    auto length = this->do_read(yield, this->inner_socket, chunk);
 
     if (length < 3) {
         throw Socks5Error("server replied error");
@@ -299,17 +299,17 @@ void Session::Private::doInnerSocks5Phase2(YieldContext yield) {
     }
 }
 
-void Session::Private::doProxying(YieldContext yield, Socket & input, Socket & output) {
-    auto self = this->kungFuDeathGrip();
-    auto chunk = createChunk();
+void Session::Private::do_proxying(YieldContext yield, Socket & input, Socket & output) {
+    auto self = this->kung_fu_death_grip();
+    auto chunk = create_chunk();
     try {
         while (true) {
-            auto length = this->doRead(yield, input, chunk);
-            this->doWrite(yield, output, chunk, length);
+            auto length = this->do_read(yield, input, chunk);
+            this->do_write(yield, output, chunk, length);
         }
     } catch (EndOfFileError & e) {
         self->stop();
     } catch (ConnectionError & e) {
-        reportError("connection error", e);
+        report_error("connection error", e);
     }
 }

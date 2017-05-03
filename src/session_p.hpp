@@ -20,8 +20,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef SESSION_HPP_
-#define SESSION_HPP_
+#ifndef S5P_SESSION_HPP_
+#define S5P_SESSION_HPP_
 
 #include "session.hpp"
 
@@ -40,18 +40,18 @@ class Session::Private {
 public:
     Private(Socket socket);
 
-    std::shared_ptr<Session> kungFuDeathGrip();
+    std::shared_ptr<Session> kung_fu_death_grip();
 
-    void doStart(YieldContext yield);
-    ResolvedRange doInnerResolve(YieldContext yield);
-    bool doInnerConnect(YieldContext yield, Resolver::iterator it);
-    void doInnerSocks5(YieldContext yield);
-    void doInnerSocks5Phase1(YieldContext yield);
-    void doInnerSocks5Phase2(YieldContext yield);
-    void doProxying(YieldContext yield, Socket & input, Socket & output);
+    void do_start(YieldContext yield);
+    ResolvedRange do_inner_resolve(YieldContext yield);
+    bool do_inner_connect(YieldContext yield, Resolver::iterator it);
+    void do_inner_socks5(YieldContext yield);
+    void do_inner_socks5_phase1(YieldContext yield);
+    void do_inner_socks5_phase2(YieldContext yield);
+    void do_proxying(YieldContext yield, Socket & input, Socket & output);
 
-    void doWrite(YieldContext yield, Socket & socket, const Chunk & chunk, std::size_t length);
-    std::size_t doRead(YieldContext yield, Socket & socket, Chunk & chunk);
+    void do_write(YieldContext yield, Socket & socket, const Chunk & chunk, std::size_t length);
+    std::size_t do_read(YieldContext yield, Socket & socket, Chunk & chunk);
 
     std::weak_ptr<Session> self;
     Socket outer_socket;

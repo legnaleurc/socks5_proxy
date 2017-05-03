@@ -20,8 +20,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef SERVER_HPP
-#define SERVER_HPP
+#ifndef S5P_SERVER_HPP
+#define S5P_SERVER_HPP
 
 #include "global.hpp"
 
@@ -34,8 +34,8 @@ class Server {
 public:
     explicit Server(IOLoop & loop);
 
-    void listenV4(uint16_t port);
-    void listenV6(uint16_t port);
+    void listen_v4(uint16_t port);
+    void listen_v6(uint16_t port);
 
 private:
     Server(const Server &);

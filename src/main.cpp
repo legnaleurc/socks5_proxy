@@ -33,8 +33,8 @@ int main(int argc, char * argv[]) {
 
     s5p::Server server(app.ioloop());
 
-    server.listenV4(app.port());
-    server.listenV6(app.port());
+    server.listen_v4(app.get_port());
+    server.listen_v6(app.get_port());
 
     return app.exec();
 }

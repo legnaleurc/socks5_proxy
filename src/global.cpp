@@ -71,12 +71,12 @@ Application::Application(int argc, char ** argv)
 }
 
 int Application::prepare() {
-    auto options = _->createOptions();
+    auto options = _->create_options();
     OptionMap args;
     try {
-        args = _->parseOptions(options);
+        args = _->parse_options(options);
     } catch (std::exception & e) {
-        reportError("invalid argument", e);
+        report_error("invalid argument", e);
         return 1;
     }
 
@@ -86,24 +86,24 @@ int Application::prepare() {
     }
 
     std::ostringstream sout;
-    if (this->port() == 0) {
+    if (this->get_port() == 0) {
         sout << "missing <port>" << std::endl;
     }
-    if (this->socks5Host().empty()) {
+    if (this->get_socks5_host().empty()) {
         sout << "missing <socks5_host>" << std::endl;
     }
-    if (this->socks5Port() == 0) {
+    if (this->get_socks5_port() == 0) {
         sout << "missing <socks5_port>" << std::endl;
     }
-    if (this->httpPort() == 0) {
+    if (this->get_http_port() == 0) {
         sout << "missing <http_port>" << std::endl;
     }
-    if (this->httpHostType() == AddressType::UNKNOWN) {
+    if (this->get_http_host_type() == AddressType::UNKNOWN) {
         sout << "invalid <http_host>" << std::endl;
     }
     auto errorString = sout.str();
     if (!errorString.empty()) {
-        reportError(errorString);
+        report_error(errorString);
         return 1;
     }
 
@@ -114,35 +114,35 @@ IOLoop & Application::ioloop() const {
     return _->loop;
 }
 
-uint16_t Application::port() const {
+uint16_t Application::get_port() const {
     return _->port;
 }
 
-const std::string & Application::socks5Host() const {
+const std::string & Application::get_socks5_host() const {
     return _->socks5_host;
 }
 
-uint16_t Application::socks5Port() const {
+uint16_t Application::get_socks5_port() const {
     return _->socks5_port;
 }
 
-uint16_t Application::httpPort() const {
+uint16_t Application::get_http_port() const {
     return _->http_port;
 }
 
-AddressType Application::httpHostType() const {
+AddressType Application::get_http_host_type() const {
     return _->http_host_type;
 }
 
-const AddressV4 & Application::httpHostAsIpv4() const {
+const AddressV4 & Application::get_http_host_as_ipv4() const {
     return _->http_host_ipv4;
 }
 
-const AddressV6 & Application::httpHostAsIpv6() const {
+const AddressV6 & Application::get_http_host_as_ipv6() const {
     return _->http_host_ipv6;
 }
 
-const std::string & Application::httpHostAsFqdn() const {
+const std::string & Application::get_http_host_as_fqdn() const {
     return _->http_host_fqdn;
 }
 
@@ -150,7 +150,7 @@ int Application::exec() {
     namespace ph = std::placeholders;
 
     s5p::SignalHandler signals(_->loop, SIGINT, SIGTERM);
-    signals.async_wait(std::bind(&Application::Private::onSystemSignal, _, ph::_1, ph::_2));
+    signals.async_wait(std::bind(&Application::Private::on_system_signal, _, ph::_1, ph::_2));
 
     _->loop.run();
     return 0;
@@ -169,7 +169,7 @@ Application::Private::Private(int argc, char ** argv)
 {
 }
 
-Options Application::Private::createOptions() {
+Options Application::Private::create_options() {
     namespace ph = std::placeholders;
     namespace po = boost::program_options;
 
@@ -178,29 +178,29 @@ Options Application::Private::createOptions() {
         ("help,h", "show this message")
         ("port,p", po::value<uint16_t>()
             ->value_name("<port>")
-            ->notifier(std::bind(&Application::Private::setPort, this, ph::_1)),
+            ->notifier(std::bind(&Application::Private::set_port, this, ph::_1)),
             "listen to the port")
         ("socks5-host", po::value<std::string>()
             ->value_name("<socks5_host>")
-            ->notifier(std::bind(&Application::Private::setSocks5Host, this, ph::_1))
+            ->notifier(std::bind(&Application::Private::set_socks5_host, this, ph::_1))
             , "SOCKS5 host")
         ("socks5-port", po::value<uint16_t>()
             ->value_name("<socks5_port>")
-            ->notifier(std::bind(&Application::Private::setSocks5Port, this, ph::_1))
+            ->notifier(std::bind(&Application::Private::set_socks5_port, this, ph::_1))
             , "SOCKS5 port")
         ("http-host", po::value<std::string>()
             ->value_name("<http_host>")
-            ->notifier(std::bind(&Application::Private::setHttpHost, this, ph::_1))
+            ->notifier(std::bind(&Application::Private::set_http_host, this, ph::_1))
             , "forward to this host")
         ("http-port", po::value<uint16_t>()
             ->value_name("<http_port>")
-            ->notifier(std::bind(&Application::Private::setHttpPort, this, ph::_1))
+            ->notifier(std::bind(&Application::Private::set_http_port, this, ph::_1))
             , "forward to this port")
     ;
     return std::move(od);
 }
 
-OptionMap Application::Private::parseOptions(const Options & options) const {
+OptionMap Application::Private::parse_options(const Options & options) const {
     namespace po = boost::program_options;
 
     OptionMap vm;
@@ -211,28 +211,28 @@ OptionMap Application::Private::parseOptions(const Options & options) const {
     return std::move(vm);
 }
 
-void Application::Private::onSystemSignal(const ErrorCode & ec, int signal_number) {
+void Application::Private::on_system_signal(const ErrorCode & ec, int signal_number) {
     if (ec) {
         // TODO handle error
-        reportError("signal", ec);
+        report_error("signal", ec);
     }
     std::cout << "received " << signal_number << std::endl;
     this->loop.stop();
 }
 
-void Application::Private::setPort(uint16_t port) {
+void Application::Private::set_port(uint16_t port) {
     this->port = port;
 }
 
-void Application::Private::setSocks5Host(const std::string & socks5_host) {
+void Application::Private::set_socks5_host(const std::string & socks5_host) {
     this->socks5_host = socks5_host;
 }
 
-void Application::Private::setSocks5Port(uint16_t socks5_port) {
+void Application::Private::set_socks5_port(uint16_t socks5_port) {
     this->socks5_port = socks5_port;
 }
 
-void Application::Private::setHttpHost(const std::string & http_host) {
+void Application::Private::set_http_host(const std::string & http_host) {
     ErrorCode ec;
     auto address = Address::from_string(http_host, ec);
     if (ec) {
@@ -249,18 +249,18 @@ void Application::Private::setHttpHost(const std::string & http_host) {
     }
 }
 
-void Application::Private::setHttpPort(uint16_t http_port) {
+void Application::Private::set_http_port(uint16_t http_port) {
     this->http_port = http_port;
 }
 
 
 namespace s5p {
 
-Chunk createChunk() {
+Chunk create_chunk() {
     return std::move(Chunk());
 }
 
-void putBigEndian(uint8_t * dst, uint16_t native) {
+void put_big_endian(uint8_t * dst, uint16_t native) {
     uint16_t * view = reinterpret_cast<uint16_t *>(dst);
 #if !defined(__APPLE__) && !defined(_WIN32)
     *view = htobe16(native);
@@ -269,19 +269,19 @@ void putBigEndian(uint8_t * dst, uint16_t native) {
 #endif
 }
 
-void reportError(const std::string & msg) {
+void report_error(const std::string & msg) {
     std::cerr << msg << std::endl;
 }
 
-void reportError(const std::string & msg, const boost::system::error_code & ec) {
+void report_error(const std::string & msg, const boost::system::error_code & ec) {
     std::cerr << msg << " (code: " << ec << ", what: " << ec.message() << ")" << std::endl;
 }
 
-void reportError(const std::string & msg, const BasicBoostError & e) {
+void report_error(const std::string & msg, const BasicBoostError & e) {
     std::cerr << msg << " (code: " << e.code() << ", what: " << e.what() << ")" << std::endl;
 }
 
-void reportError(const std::string & msg, const std::exception & e) {
+void report_error(const std::string & msg, const std::exception & e) {
     std::cerr << msg << " (what: " << e.what() << ")" << std::endl;
 }
 

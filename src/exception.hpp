@@ -20,8 +20,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef EXCEPTION_HPP
-#define EXCEPTION_HPP
+#ifndef S5P_EXCEPTION_HPP
+#define S5P_EXCEPTION_HPP
 
 #include <boost/system/system_error.hpp>
 

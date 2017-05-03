@@ -20,8 +20,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef SERVER_HPP_
-#define SERVER_HPP_
+#ifndef S5P_SERVER_HPP_
+#define S5P_SERVER_HPP_
 
 #include "server.hpp"
 
@@ -32,10 +32,10 @@ class Server::Private {
 public:
     explicit Private(IOLoop & loop);
 
-    void doV4Listen(uint16_t port);
-    void doV4Accept();
-    void doV6Listen(uint16_t port);
-    void doV6Accept();
+    void do_v4_listen(uint16_t port);
+    void do_v4_accept();
+    void do_v6_listen(uint16_t port);
+    void do_v6_accept();
 
     Acceptor v4_acceptor;
     Acceptor v6_acceptor;

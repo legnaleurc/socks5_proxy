@@ -20,8 +20,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef GLOBAL_HPP
-#define GLOBAL_HPP
+#ifndef S5P_GLOBAL_HPP
+#define S5P_GLOBAL_HPP
 
 #include "exception.hpp"
 
@@ -58,14 +58,14 @@ public:
     int prepare();
 
     IOLoop & ioloop() const;
-    uint16_t port() const;
-    const std::string & socks5Host() const;
-    uint16_t socks5Port() const;
-    const AddressV4 & httpHostAsIpv4() const;
-    const AddressV6 & httpHostAsIpv6() const;
-    const std::string & httpHostAsFqdn() const;
-    uint16_t httpPort() const;
-    AddressType httpHostType() const;
+    uint16_t get_port() const;
+    const std::string & get_socks5_host() const;
+    uint16_t get_socks5_port() const;
+    const AddressV4 & get_http_host_as_ipv4() const;
+    const AddressV6 & get_http_host_as_ipv6() const;
+    const std::string & get_http_host_as_fqdn() const;
+    uint16_t get_http_port() const;
+    AddressType get_http_host_type() const;
 
     int exec();
 
@@ -80,12 +80,12 @@ private:
 };
 
 
-Chunk createChunk();
-void putBigEndian(uint8_t * dst, uint16_t native);
-void reportError(const std::string & msg);
-void reportError(const std::string & msg, const boost::system::error_code & ec);
-void reportError(const std::string & msg, const s5p::BasicBoostError & e);
-void reportError(const std::string & msg, const std::exception & e);
+Chunk create_chunk();
+void put_big_endian(uint8_t * dst, uint16_t native);
+void report_error(const std::string & msg);
+void report_error(const std::string & msg, const boost::system::error_code & ec);
+void report_error(const std::string & msg, const s5p::BasicBoostError & e);
+void report_error(const std::string & msg, const std::exception & e);
 
 }
 
