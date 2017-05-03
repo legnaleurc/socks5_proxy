@@ -22,8 +22,6 @@
  */
 #include "global_p.hpp"
 
-#include "exception.hpp"
-
 #include <boost/asio/signal_set.hpp>
 
 #include <iostream>
