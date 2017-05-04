@@ -99,9 +99,9 @@ int Application::prepare() {
     if (this->get_http_host_type() == AddressType::UNKNOWN) {
         sout << "invalid <http_host>" << std::endl;
     }
-    auto errorString = sout.str();
-    if (!errorString.empty()) {
-        report_error(errorString);
+    auto error_string = sout.str();
+    if (!error_string.empty()) {
+        report_error(error_string);
         return 1;
     }
 

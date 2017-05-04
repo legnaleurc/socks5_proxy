@@ -127,8 +127,8 @@ void Session::Private::do_start(YieldContext yield) {
     bool ok = false;
 
     try {
-        auto resolvedRange = this->do_inner_resolve(yield);
-        for (auto it = resolvedRange.first; !ok && it != resolvedRange.second; ++it) {
+        auto resolved_range = this->do_inner_resolve(yield);
+        for (auto it = resolved_range.first; !ok && it != resolved_range.second; ++it) {
             ok = this->do_inner_connect(yield, it);
         }
         if (!ok) {
