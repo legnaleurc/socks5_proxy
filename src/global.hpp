@@ -41,7 +41,7 @@ typedef boost::asio::ip::tcp::socket Socket;
 typedef boost::system::error_code ErrorCode;
 
 
-enum AddressType {
+enum class AddressType : uint8_t {
     IPV4,
     IPV6,
     FQDN,
